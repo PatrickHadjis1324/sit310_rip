@@ -24,25 +24,25 @@ def move_turtle_square():
 
         rate.sleep()
         
-        cmd_vel_msg = Twist()
-        cmd_vel_msg.linear.y = 2.0
-        velocity_publisher.publish(cmd_vel_msg)
+        cmd_vel_msg = Twist() 
+        cmd_vel_msg.linear.y = 2.0  # Linear velocity
+        velocity_publisher.publish(cmd_vel_msg) # Publish!
         
         rate.sleep()
         
+        cmd_vel_msg = Twist() 
+        cmd_vel_msg.linear.x = -2.0  # Linear velocity
+        velocity_publisher.publish(cmd_vel_msg) # Publish!
         
+        rate.sleep()
+
         # Create a Twist message for moving backward 
         cmd_vel_msg = Twist()
-        cmd_vel_msg.linear.x = -2.0  # Linear velocity
+        cmd_vel_msg.linear.y = -2.0  # Linear velocity
         velocity_publisher.publish(cmd_vel_msg) # Publish!
 
         rate.sleep()
-        
-        cmd_vel_msg = Twist()
-        cmd_vel_msg.linear.y = -2.0
-        velocity_publisher.publish(cmd_vel_msg)
-        
-        rate.sleep()
+
         ###########################################
 
 if __name__ == '__main__': 
