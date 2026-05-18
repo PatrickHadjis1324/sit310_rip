@@ -6,7 +6,7 @@ from duckietown_msgs.msg import WheelEncoderStamped, Twist2DStamped
 
 class ClosedLoopSquare:
     def __init__(self, robot_name="mybota002409"):
-        self.robot_name = mybota002409
+        self.robot_name = robot_name
         self.ticks_per_meter = 660.7  # <-- Calibrate for your robot!
         self.ticks_per_degree = 2.0  # <-- Calibrate for your robot!
         self.left_tick_start = None
