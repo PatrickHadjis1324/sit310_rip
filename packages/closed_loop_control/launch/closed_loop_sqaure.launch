@@ -4,4 +4,5 @@
         <node pkg="closed_loop_control" name="closed_loop_square" type="closed_loop_square.py"
             output="screen" />
     </group>
+    <param name="robot_name" value="$(env VEHICLE_NAME)" />
 </launch>
