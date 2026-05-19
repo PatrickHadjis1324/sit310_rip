@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+import rospy # type: ignore
+from duckietown_msgs.msg import Twist2DStamped # type: ignore
+from duckietown_msgs.msg import FSMState # type: ignore
+from duckietown_msgs.msg import AprilTagDetectionArray # type: ignore
+
+class Target_Follower:
+    def __init__(self):
+
+        #Initialize ROS node
+        rospy.init_node('target_follower_node', anonymous=True)
+
+        # When shutdown signal is received, we run clean_shutdown function
+        rospy.on_shutdown(self.clean_shutdown)
+
+        ###### Init Pub/Subs. REMEMBER TO REPLACE "akandb" WITH YOUR ROBOT'S NAME #####
+        self.cmd_vel_pub = rospy.Publisher('/nabot/car_cmd_switch_node/cmd', Twist2DStamped, queue_size=1)
+        rospy.Subscriber('/nabot/apriltag_detector_node/detections', AprilTagDetectionArray, self.tag_callback, queue_size=1)
+
+        rospy.spin() # Spin forever but listen to message callbacks
+
+    # Apriltag Detection Callback
+    def tag_callback(self, msg):
+        self.move_robot(msg.detections)
+ 
+    # Stop Robot before node has shut down. This ensures the robot keep moving with the latest velocity command
+    def clean_shutdown(self):
+        rospy.loginfo("System shutting down. Stopping robot...")
+        self.stop_robot()
+
+    # Sends zero velocity to stop the robot
+    def stop_robot(self):
+        cmd_msg = Twist2DStamped()
+        cmd_msg.header.stamp = rospy.Time.now()
+        cmd_msg.v = 0.0
+        cmd_msg.omega = 0.0
+        self.cmd_vel_pub.publish(cmd_msg)
+
+    def move_robot(self, detections):
+
+        #### YOUR CODE GOES HERE ####
+        cmd_msg = Twist2DStamped()
+
+        if len(detections) == 0:
+            # cmd_msg.header.stamp = rospy.Time.now()
+            # cmd_msg.v = 0.0
+            # cmd_msg.omega = 0.2
+            # self.cmd_vel_pub.publish(cmd_msg)
+            rospy.loginfo("robot cannot find sign, searching for sign")
+            self.stop_robot()
+
+            return
+
+        if detections[0].tag_id != 26:
+            rospy.loginfo("detected a sign but not a stop sign so returning %d", detections[0].tag_id)
+
+            return
+
+        x = detections[0].transform.translation.x
+        y = detections[0].transform.translation.y
+        z = detections[0].transform.translation.z
+
+        rospy.loginfo("x,y,z: %f %f %f", x, y, z)
+
+        omega_pub = 0
+        linear_pub = 0
+        middle_range = 0.04
+        linear_ideal = 0.2
+
+        # Publish a velocity
+        # robot is too far right
+        if x > 0 + middle_range:
+            # robot needs to turn left
+            omega_pub = -0.2
+            rospy.loginfo("sign is too far right, turning left")
+        elif x < 0 - middle_range:
+            omega_pub = 0.2
+            rospy.loginfo("sign is too far left, turning right")
+        else:
+            rospy.loginfo("sign located, now checking for linear movement")
+            # perform linear movement here once we know we are angularly correct
+            omega_pub = 0
+
+            if z > linear_ideal:
+                rospy.loginfo("applying forward linear movement")
+                linear_pub = 0.5
+            else:
+                linear_pub = 0
+
+        cmd_msg.header.stamp = rospy.Time.now()
+        cmd_msg.v = linear_pub
+        cmd_msg.omega = omega_pub # up is left
+        self.cmd_vel_pub.publish(cmd_msg)
+
+        #############################
+
+if __name__ == '__main__':
+    try:
+        target_follower = Target_Follower()
+    except rospy.ROSInterruptException:
+        pass
+
