@@ -5,76 +5,76 @@ import time
 import math
 from duckietown_msgs.msg import Twist2DStamped
 from duckietown_msgs.msg import FSMState
-from nav_msgs.msg import Odometry
+from std_msgs.msg import Int32
+
+TICKS_PER_METER = 350.0
 
 
 class Drive_Square:
     def __init__(self):
-        # Initialize global class variables
         self.cmd_msg = Twist2DStamped()
-        self.x = 0.0
-        self.y = 0.0
-        self.yaw = 0.0
-        self.odom_received = False
+        self.left_ticks = 0
+        self.right_ticks = 0
+        self.left_ticks_start = 0
+        self.right_ticks_start = 0
+        self.encoder_received = False
 
-        # Initialize ROS node
         rospy.init_node("drive_square_node", anonymous=True)
 
-        # Initialize Pub/Subs
         self.pub = rospy.Publisher(
             "/mybota002409/car_cmd_switch_node/cmd", Twist2DStamped, queue_size=1
         )
         rospy.Subscriber(
             "/mybota002409/fsm_node/mode", FSMState, self.fsm_callback, queue_size=1
         )
-        rospy.Subscriber("/odom", Odometry, self.odom_callback, queue_size=1)
-
-    def odom_callback(self, msg):
-        self.x = msg.pose.pose.position.x
-        self.y = msg.pose.pose.position.y
-        # Extract yaw from quaternion
-        orientation_q = msg.pose.pose.orientation
-        siny_cosp = 2 * (
-            orientation_q.w * orientation_q.z + orientation_q.x * orientation_q.y
+        rospy.Subscriber(
+            "/left_wheel_encoder", Int32, self.left_encoder_callback, queue_size=1
         )
-        cosy_cosp = 1 - 2 * (
-            orientation_q.y * orientation_q.y + orientation_q.z * orientation_q.z
+        rospy.Subscriber(
+            "/right_wheel_encoder", Int32, self.right_encoder_callback, queue_size=1
         )
-        self.yaw = math.atan2(siny_cosp, cosy_cosp)
-        self.odom_received = True
 
-    # robot only moves when lane following is selected on the duckiebot joystick app
+    def left_encoder_callback(self, msg):
+        self.left_ticks = msg.data
+        self.encoder_received = True
+
+    def right_encoder_callback(self, msg):
+        self.right_ticks = msg.data
+        self.encoder_received = True
+
+    def wait_for_encoders(self):
+        rospy.loginfo("Waiting for encoder data...")
+        while not rospy.is_shutdown() and not self.encoder_received:
+            rospy.sleep(0.1)
+
+    def get_average_ticks(self):
+        return (self.left_ticks + self.right_ticks) / 2.0
+
     def fsm_callback(self, msg):
         rospy.loginfo("State: %s", msg.state)
         if msg.state == "LANE_FOLLOWING":
-            rospy.sleep(1)  # Wait for a sec for the node to be ready
-            self.draw_square(side_length=1.0, speed=0.2, angular_speed=0.5)
+            rospy.sleep(1)
+            self.draw_square(side_length=1.0, speed=0.2, angular_speed=1.0)
 
-    # Sends zero velocities to stop the robot
     def stop_robot(self):
         self.cmd_msg.header.stamp = rospy.Time.now()
         self.cmd_msg.v = 0.0
         self.cmd_msg.omega = 0.0
         self.pub.publish(self.cmd_msg)
 
-    # Spin forever but listen to message callbacks
     def run(self):
-        rospy.spin()  # keeps node from exiting until node has shutdown
-
-    def wait_for_odom(self):
-        rospy.loginfo("Waiting for odometry data...")
-        while not rospy.is_shutdown() and not self.odom_received:
-            rospy.sleep(0.1)
+        rospy.spin()
 
     def move_straight(self, distance, speed):
-        """Moves the robot straight for a given distance at a given speed using odometry."""
-        self.wait_for_odom()
-        start_x, start_y = self.x, self.y
+        """Moves the robot straight for a given distance at a given speed using encoder ticks."""
+        self.wait_for_encoders()
+        start_ticks = self.get_average_ticks()
         direction = 1 if distance >= 0 else -1
         speed = abs(speed) * direction
+        target_ticks = abs(distance) * TICKS_PER_METER
 
         rospy.loginfo(
-            f"[move_straight] Requested distance: {distance} m, speed: {speed} m/s"
+            f"[move_straight] Requested distance: {distance} m, speed: {speed} m/s, target_ticks: {target_ticks}"
         )
 
         self.cmd_msg.v = speed
@@ -85,13 +85,13 @@ class Drive_Square:
         while not rospy.is_shutdown():
             self.cmd_msg.header.stamp = rospy.Time.now()
             self.pub.publish(self.cmd_msg)
-            dx = self.x - start_x
-            dy = self.y - start_y
-            traveled = math.sqrt(dx * dx + dy * dy)
+            current_ticks = self.get_average_ticks()
+            traveled_ticks = abs(current_ticks - start_ticks)
             rospy.loginfo_throttle(
-                1, f"[move_straight] Traveled: {traveled:.3f} m / {abs(distance):.3f} m"
+                1,
+                f"[move_straight] Traveled: {traveled_ticks:.1f} ticks / {target_ticks:.1f} ticks",
             )
-            if traveled >= abs(distance):
+            if traveled_ticks >= target_ticks:
                 break
             rate.sleep()
 
@@ -100,55 +100,54 @@ class Drive_Square:
 
     def rotate_in_place(self, angle, angular_speed):
         """
-        Rotates the robot in place for a given angle at a given angular speed using odometry.
-        Handles both clockwise and counterclockwise motion.
+        Rotates the robot in place for a given angle at a given angular speed using encoder ticks.
+        Assumes both wheels move in opposite directions for in-place rotation.
         """
-        self.wait_for_odom()
-        start_yaw = self.yaw
+        self.wait_for_encoders()
+        # Calculate the ticks needed for the desired rotation
+        # For a differential drive, the arc length for each wheel is: L = (angle * wheel_base) / 2
+        # You need to know your robot's wheel_base (distance between wheels)
+        WHEEL_BASE = 0.1  # <-- Set this to your robot's wheel base in meters!
+        arc_length = (abs(angle) * WHEEL_BASE) / 2.0
+        target_ticks = arc_length * TICKS_PER_METER
+
         direction = 1 if angle >= 0 else -1
         angular_speed = abs(angular_speed) * direction
-        target_angle = abs(angle)
 
         rospy.loginfo(
-            f"[rotate_in_place] Requested angle: {angle} rad, angular_speed: {angular_speed} rad/s"
+            f"[rotate_in_place] Requested angle: {angle} rad, angular_speed: {angular_speed} rad/s, target_ticks: {target_ticks}"
         )
+
+        left_start = self.left_ticks
+        right_start = self.right_ticks
 
         self.cmd_msg.v = 0.0
         self.cmd_msg.omega = angular_speed
 
         rate = rospy.Rate(10)  # 10 Hz
 
-        def angle_diff(a, b):
-            d = a - b
-            while d > math.pi:
-                d -= 2 * math.pi
-            while d < -math.pi:
-                d += 2 * math.pi
-            return d
-
         while not rospy.is_shutdown():
             self.cmd_msg.header.stamp = rospy.Time.now()
             self.pub.publish(self.cmd_msg)
-            delta_yaw = abs(angle_diff(self.yaw, start_yaw))
+            left_delta = abs(self.left_ticks - left_start)
+            right_delta = abs(self.right_ticks - right_start)
+            avg_delta = (left_delta + right_delta) / 2.0
             rospy.loginfo_throttle(
                 1,
-                f"[rotate_in_place] Rotated: {delta_yaw:.3f} rad / {target_angle:.3f} rad",
+                f"[rotate_in_place] Rotated: {avg_delta:.1f} ticks / {target_ticks:.1f} ticks",
             )
-            if delta_yaw >= target_angle:
+            if avg_delta >= target_ticks:
                 break
             rate.sleep()
 
         rospy.loginfo("[rotate_in_place] Target angle reached. Stopping robot.")
         self.stop_robot()
 
-    def draw_square(self, side_length=1.0, speed=0.2, angular_speed=0.5):
-        """
-        Draws a square with the given side length, speed, and angular speed.
-        """
+    def draw_square(self, side_length=1.0, speed=0.2, angular_speed=1.0):
         for i in range(4):
             rospy.loginfo(f"[draw_square] Side {i+1}/4: Moving straight.")
             self.move_straight(side_length, speed)
-            rospy.sleep(1)  # Small pause
+            rospy.sleep(1)
             rospy.loginfo(f"[draw_square] Side {i+1}/4: Rotating 90 degrees.")
             self.rotate_in_place(math.pi / 2, angular_speed)
             rospy.sleep(1)
@@ -159,4 +158,4 @@ if __name__ == "__main__":
         duckiebot_movement = Drive_Square()
         duckiebot_movement.run()
     except rospy.ROSInterruptException:
-        passass
+        pass
