@@ -26,7 +26,9 @@ class Drive_Square:
         rospy.loginfo("State: %s", msg.state)
         if msg.state == "LANE_FOLLOWING":
             rospy.sleep(1)  # Wait for a sec for the node to be ready
-            self.move_robot()
+            self.move_straight(1.0, 0.2)
+            rospy.sleep(1)  # Short pause before next command
+            self.move_straight(-1.0, 0.1)
 
     # Sends zero velocities to stop the robot
     def stop_robot(self):
