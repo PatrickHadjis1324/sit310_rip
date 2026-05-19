@@ -47,40 +47,22 @@ class Target_Follower:
         self.cmd_vel_pub.publish(cmd_msg)
 
     def move_robot(self, detections):
-        # --- SEEK AN OBJECT FEATURE ---
-        if len(detections) == 0:
-            rospy.loginfo("Nothing detected. Seeking object...")
-            cmd_msg = Twist2DStamped()
-            cmd_msg.header.stamp = rospy.Time.now()
-            cmd_msg.v = 0.0
-            cmd_msg.omega = 0.5  # adjust direction/speed as needed
-            self.cmd_vel_pub.publish(cmd_msg)
-            return
-
-        # --- LOOK AT THE OBJECT FEATURE ---
-        # Focus on the first detected tag (or average if you want to handle multiple)
-        x = detections[0].transform.translation.x
-        y = detections[0].transform.translation.y
-        z = detections[0].transform.translation.z
-
-        rospy.loginfo("x,y,z: %f %f %f", x, y, z)
-
-        # --- Proportional Control to center the tag ---
-        Kp = 2.0  # Tune this parameter for your robot
-        min_omega = 0.1
-        max_omega = 1.0
-
-        omega = -Kp * y
-        # Clamp omega to avoid stalling or overshooting
-        if omega > 0:
-            omega = max(min_omega, min(omega, max_omega))
-        else:
-            omega = min(-min_omega, max(omega, -max_omega))
-
         cmd_msg = Twist2DStamped()
         cmd_msg.header.stamp = rospy.Time.now()
-        cmd_msg.v = 0.0
-        cmd_msg.omega = omega
+        cmd_msg.v = 0.0  # No forward movement
+
+        if len(detections) == 0:
+            # SEEK: Spin in place to find an object
+            cmd_msg.omega = 0.5
+            rospy.loginfo("Seeking object: omega=%.2f", cmd_msg.omega)
+        else:
+            # LOOK: Turn to face the first detected object
+            y = detections[0].transform.translation.y
+            cmd_msg.omega = (
+                -1.5 * y
+            )  # proportional control, adjust -1.5 if too fast/slow
+            rospy.loginfo("Tracking object at y=%.3f, omega=%.2f", y, cmd_msg.omega)
+
         self.cmd_vel_pub.publish(cmd_msg)
 
 
