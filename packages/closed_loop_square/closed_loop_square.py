@@ -77,6 +77,29 @@ class Drive_Square:
         rospy.loginfo("[move_straight] Target distance reached. Stopping robot.")
         self.stop_robot()
 
+    def rotate_in_place(self, angle, angular_speed):
+        """
+        Rotates the robot in place for a given angle at a given angular speed.
+        Handles both clockwise and counterclockwise motion.
+        """
+        direction = 1 if angle >= 0 else -1
+        angular_speed = abs(angular_speed) * direction
+        duration = abs(angle / angular_speed)  # seconds
+
+        self.cmd_msg.header.stamp = rospy.Time.now()
+        self.cmd_msg.v = 0.0
+        self.cmd_msg.omega = angular_speed
+
+        start_time = time.time()
+        rate = rospy.Rate(10)  # 10 Hz
+
+        while not rospy.is_shutdown() and (time.time() - start_time) < duration:
+            self.cmd_msg.header.stamp = rospy.Time.now()
+            self.pub.publish(self.cmd_msg)
+            rate.sleep()
+
+        self.stop_robot()
+
 
 if __name__ == "__main__":
     try:
