@@ -47,23 +47,14 @@ class Target_Follower:
         self.cmd_vel_pub.publish(cmd_msg)
 
     def move_robot(self, detections):
-        cmd_msg = Twist2DStamped()
-        cmd_msg.header.stamp = rospy.Time.now()
-        cmd_msg.v = 0.0  # No forward movement
-
         if len(detections) == 0:
-            # SEEK: Spin in place to find an object
-            cmd_msg.omega = 0.5
-            rospy.loginfo("Seeking object: omega=%.2f", cmd_msg.omega)
-        else:
-            # LOOK: Turn to face the first detected object
-            y = detections[0].transform.translation.y
-            cmd_msg.omega = (
-                -1.5 * y
-            )  # proportional control, adjust -1.5 if too fast/slow
-            rospy.loginfo("Tracking object at y=%.3f, omega=%.2f", y, cmd_msg.omega)
-
-        self.cmd_vel_pub.publish(cmd_msg)
+            cmd_msg = Twist2DStamped()
+            cmd_msg.header.stamp = rospy.Time.now()
+            cmd_msg.v = 0.0
+            cmd_msg.omega = 1.0  # Rotational speed in rad/s
+            self.cmd_vel_pub.publish(cmd_msg)
+            rospy.loginfo("No objects found. Rotating to seek.")
+            return
 
 
 if __name__ == "__main__":
