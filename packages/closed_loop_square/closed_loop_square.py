@@ -54,7 +54,11 @@ class Drive_Square:
         rospy.loginfo("State: %s", msg.state)
         if msg.state == "LANE_FOLLOWING":
             rospy.sleep(1)
-            self.draw_square(side_length=1.0, speed=0.2, angular_speed=1.0)
+            # self.draw_square(side_length=1.0, speed=0.2, angular_speed=1.0)
+            self.move_straight(distance=1.0, speed=0.2)
+            rospy.sleep(1)
+            self.rotate_in_place(math.pi, 1.0)
+            rospy.sleep(1)
 
     def stop_robot(self):
         self.cmd_msg.header.stamp = rospy.Time.now()
@@ -66,91 +70,44 @@ class Drive_Square:
         rospy.spin()
 
     def move_straight(self, distance, speed):
-        """Moves the robot straight for a given distance at a given speed using encoder ticks."""
-        self.wait_for_encoders()
         start_ticks = self.get_average_ticks()
-        direction = 1 if distance >= 0 else -1
-        speed = abs(speed) * direction
-        target_ticks = abs(distance) * TICKS_PER_METER
-
-        rospy.loginfo(
-            f"[move_straight] Requested distance: {distance} m, speed: {speed} m/s, target_ticks: {target_ticks}"
-        )
-
+        target_ticks = distance * TICKS_PER_METER
         self.cmd_msg.v = speed
         self.cmd_msg.omega = 0.0
-
-        rate = rospy.Rate(10)  # 10 Hz
-
+        self.cmd_msg.header.stamp = rospy.Time.now()
+        self.pub.publish(self.cmd_msg)
         while not rospy.is_shutdown():
-            self.cmd_msg.header.stamp = rospy.Time.now()
-            self.pub.publish(self.cmd_msg)
-            current_ticks = self.get_average_ticks()
-            traveled_ticks = abs(current_ticks - start_ticks)
-            rospy.loginfo_throttle(
-                1,
-                f"[move_straight] Traveled: {traveled_ticks:.1f} ticks / {target_ticks:.1f} ticks",
-            )
-            if traveled_ticks >= target_ticks:
-                break
-            rate.sleep()
-
-        rospy.loginfo("[move_straight] Target distance reached. Stopping robot.")
+            rospy.sleep(0.01)
         self.stop_robot()
 
-    def rotate_in_place(self, angle, angular_speed):
-        """
-        Rotates the robot in place for a given angle at a given angular speed using encoder ticks.
-        Assumes both wheels move in opposite directions for in-place rotation.
-        """
-        self.wait_for_encoders()
-        # Calculate the ticks needed for the desired rotation
-        # For a differential drive, the arc length for each wheel is: L = (angle * wheel_base) / 2
-        # You need to know your robot's wheel_base (distance between wheels)
-        WHEEL_BASE = 0.1  # <-- Set this to your robot's wheel base in meters!
-        arc_length = (abs(angle) * WHEEL_BASE) / 2.0
+    def rotate_in_place(self, angle, angular_speed, wheel_base=0.1):
+        arc_length = (wheel_base / 2.0) * abs(angle)
         target_ticks = arc_length * TICKS_PER_METER
-
-        direction = 1 if angle >= 0 else -1
-        angular_speed = abs(angular_speed) * direction
-
-        rospy.loginfo(
-            f"[rotate_in_place] Requested angle: {angle} rad, angular_speed: {angular_speed} rad/s, target_ticks: {target_ticks}"
-        )
 
         left_start = self.left_ticks
         right_start = self.right_ticks
 
+        direction = 1 if angle > 0 else -1
         self.cmd_msg.v = 0.0
-        self.cmd_msg.omega = angular_speed
-
-        rate = rospy.Rate(10)  # 10 Hz
+        self.cmd_msg.omega = direction * abs(angular_speed)
+        self.cmd_msg.header.stamp = rospy.Time.now()
+        self.pub.publish(self.cmd_msg)
 
         while not rospy.is_shutdown():
-            self.cmd_msg.header.stamp = rospy.Time.now()
-            self.pub.publish(self.cmd_msg)
             left_delta = abs(self.left_ticks - left_start)
             right_delta = abs(self.right_ticks - right_start)
-            avg_delta = (left_delta + right_delta) / 2.0
-            rospy.loginfo_throttle(
-                1,
-                f"[rotate_in_place] Rotated: {avg_delta:.1f} ticks / {target_ticks:.1f} ticks",
-            )
-            if avg_delta >= target_ticks:
+            # For in-place rotation, sum of deltas should reach 2 * target_ticks
+            if (left_delta + right_delta) >= 2 * target_ticks:
                 break
-            rate.sleep()
-
-        rospy.loginfo("[rotate_in_place] Target angle reached. Stopping robot.")
+            rospy.sleep(0.01)
         self.stop_robot()
 
-    def draw_square(self, side_length=1.0, speed=0.2, angular_speed=1.0):
-        for i in range(4):
-            rospy.loginfo(f"[draw_square] Side {i+1}/4: Moving straight.")
+    def draw_square(self, side_length, speed, angular_speed):
+        for _ in range(4):
             self.move_straight(side_length, speed)
-            rospy.sleep(1)
-            rospy.loginfo(f"[draw_square] Side {i+1}/4: Rotating 90 degrees.")
+            rospy.sleep(0.5)  # brief pause between actions
             self.rotate_in_place(math.pi / 2, angular_speed)
-            rospy.sleep(1)
+            rospy.sleep(0.5)
 
 
 if __name__ == "__main__":
