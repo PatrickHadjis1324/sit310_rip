@@ -15,8 +15,8 @@ class Target_Follower:
         rospy.on_shutdown(self.clean_shutdown)
 
         ###### Init Pub/Subs. REMEMBER TO REPLACE "akandb" WITH YOUR ROBOT'S NAME #####
-        self.cmd_vel_pub = rospy.Publisher('/nabot/car_cmd_switch_node/cmd', Twist2DStamped, queue_size=1)
-        rospy.Subscriber('/nabot/apriltag_detector_node/detections', AprilTagDetectionArray, self.tag_callback, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher('/mybota002409/car_cmd_switch_node/cmd', Twist2DStamped, queue_size=1)
+        rospy.Subscriber('/mybota002409/apriltag_detector_node/detections', AprilTagDetectionArray, self.tag_callback, queue_size=1)
 
         rospy.spin() # Spin forever but listen to message callbacks
 
@@ -43,16 +43,16 @@ class Target_Follower:
         cmd_msg = Twist2DStamped()
 
         if len(detections) == 0:
-            # cmd_msg.header.stamp = rospy.Time.now()
-            # cmd_msg.v = 0.0
-            # cmd_msg.omega = 0.2
-            # self.cmd_vel_pub.publish(cmd_msg)
+            cmd_msg.header.stamp = rospy.Time.now()
+            cmd_msg.v = 0.0
+            cmd_msg.omega = 0.5
+            self.cmd_vel_pub.publish(cmd_msg)
             rospy.loginfo("robot cannot find sign, searching for sign")
             self.stop_robot()
 
             return
 
-        if detections[0].tag_id != 26:
+        if detections[0].tag_id != 25:
             rospy.loginfo("detected a sign but not a stop sign so returning %d", detections[0].tag_id)
 
             return
@@ -100,4 +100,5 @@ if __name__ == '__main__':
         target_follower = Target_Follower()
     except rospy.ROSInterruptException:
         pass
+
 
