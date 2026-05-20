@@ -1,7 +1,0 @@
-<launch>
-    <!-- vehicle name so it can work with any robot -->
-    <group ns="$(env VEHICLE_NAME)">
-        <node pkg="closed_loop_square" name="closed_loop_square" type="closed_loop_square.py"
-            output="screen" />
-    </group>
-</launch>
